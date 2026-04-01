@@ -8,8 +8,8 @@ Protect your development machine from supply chain attacks with two layers of de
 ## Quick Start
 
 ```bash
-bash scripts/check-status.sh    # See what's currently protected
-bash scripts/setup.sh           # Set up everything
+./scripts/check-status.sh    # See what's currently protected
+./scripts/setup.sh           # Set up everything
 ```
 
 ## What Is a Supply Chain Attack?

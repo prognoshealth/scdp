@@ -3,7 +3,7 @@ set -euo pipefail
 
 # =============================================================================
 # setup.sh — Supply Chain Attack Protection Toolkit
-# Usage: bash setup.sh [--no-shim]
+# Usage: ./setup.sh [--no-shim]
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,7 +13,7 @@ for arg in "$@"; do
     case "$arg" in
         --no-shim) SKIP_SHIM=true ;;
         --help|-h)
-            echo "Usage: bash setup.sh [--no-shim]"
+            echo "Usage: ./setup.sh [--no-shim]"
             echo ""
             echo "  --no-shim   Skip sfw malware scanner installation"
             echo ""
@@ -24,7 +24,7 @@ for arg in "$@"; do
             ;;
         *)
             echo "Unknown option: $arg"
-            echo "Usage: bash setup.sh [--no-shim]"
+            echo "Usage: ./setup.sh [--no-shim]"
             exit 1
             ;;
     esac
