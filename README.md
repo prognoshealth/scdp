@@ -23,7 +23,11 @@ A **supply chain attack** targets these dependencies rather than your code direc
 - **Dependency confusion** — exploiting how package managers resolve private vs public package names
 - **Malicious post-install scripts** — packages that run code during `npm install` before you've reviewed anything
 
-For a comprehensive overview, see the [Open Source Security Foundation (OpenSSF) guide](https://openssf.org/resources/) and Socket.dev's [2025 supply chain threat report](https://socket.dev/blog/2024-software-supply-chain-security-report).
+### A Real Example: Axios (March 2026)
+
+[Axios](https://socket.dev/blog/axios-npm-package-compromised) — an HTTP client with 100 million weekly npm downloads — was compromised when an attacker used a leaked npm token to publish malicious versions (`1.14.1` and `0.30.4`) directly to npm, bypassing the project's normal GitHub release process. The poisoned versions added a trojanized dependency (`plain-crypto-js`) that ran a post-install script deploying a remote access trojan with platform-specific payloads for macOS, Windows, and Linux. It enabled arbitrary command execution, exfiltrated system data, and then self-destructed to erase evidence.
+
+Security researchers detected it within six minutes — but anyone who ran `npm install` during that window was compromised. Release-age gating would have blocked these versions entirely since they were minutes old, not days.
 
 ### Why This Is Getting Worse
 
