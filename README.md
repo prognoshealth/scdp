@@ -55,7 +55,7 @@ Configures release-age gating in package manager config files. Sets a 7-day mini
 
 | File | Setting | Tool |
 |------|---------|------|
-| `~/.npmrc` | `min-release-age=10080` | npm (>=11.10) |
+| `~/.npmrc` | `min-release-age=7` | npm (>=11.10) |
 | `~/Library/Preferences/pnpm/rc` (macOS) | `minimum-release-age=10080` | pnpm (>=10.16) |
 | `~/.yarnrc.yml` | `npmMinimalAgeGate: "7d"` | yarn (>=4.10) |
 | `~/bunfig.toml` | `minimumReleaseAge = 604800` | bun (>=1.3) |

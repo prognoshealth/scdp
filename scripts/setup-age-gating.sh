@@ -136,7 +136,8 @@ configure_npm() {
 
     local config="$HOME/.npmrc"
     backup_file "$config"
-    set_ini_value "$config" "min-release-age" "10080"
+    # npm uses days (not minutes like pnpm)
+    set_ini_value "$config" "min-release-age" "$DELAY_DAYS"
 }
 
 configure_pnpm() {
