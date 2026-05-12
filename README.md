@@ -69,7 +69,7 @@ Configs are written proactively even if the tool isn't installed yet — they'll
 
 ### `scripts/setup-pip.sh`
 
-Adds shell functions that wrap `pip` and `pip3` with `--uploaded-prior-to` for age gating. If `sfw` is on PATH, it's used automatically for malware scanning too. Works with or without sfw.
+Installs `~/.config/scdp/pip.sh` — a shipped, static wrapper that injects `--uploaded-prior-to` on `pip install` / `pip download` for age gating. If `sfw` is on `PATH` when your shell starts, the wrapper also routes pip through sfw for malware scanning. Works with or without sfw.
 
 pip is handled separately because it has no config file support for age gating — a shell wrapper is the only option.
 
@@ -79,7 +79,7 @@ Installs Socket Firewall Free (`sfw`) globally via npm. sfw is a proxy that scan
 
 ### `scripts/setup-shim.sh`
 
-Adds shell functions that route package manager commands through sfw. Requires sfw to be installed first (run `scripts/install-sfw.sh`). Wraps: npm, npx, yarn, pnpm, uv.
+Installs `~/.config/scdp/sfw.sh` — a shipped, static wrapper that aliases `npm`, `npx`, `yarn`, `pnpm`, and `uv` to route through sfw. Each alias is created only for tools present on `PATH` at shell startup, so install order doesn't matter — open a new shell after installing a new tool and the alias appears. Requires sfw to be installed first (run `scripts/install-sfw.sh`).
 
 Does **not** wrap pip — that's handled by `scripts/setup-pip.sh`.
 
@@ -95,20 +95,54 @@ Pass `--no-shim` to skip steps 3 and 4 (age-gating only, no sfw).
 
 ## Shell Config
 
-The scripts detect **all existing** RC files and write to each one, so protections work regardless of which shell you open:
+The shell wrappers live in their own directory — they're **not** appended into your RC files. Each setup script:
 
-- `~/.zshrc`
-- `~/.bashrc`
-- `~/.bash_profile`
+1. Writes three files under `~/.config/scdp/` (honors `$XDG_CONFIG_HOME` if set):
+   - `init.sh` — entrypoint that sources the wrappers below; installed by both `setup-pip.sh` and `setup-shim.sh`
+   - `pip.sh` — installed by `setup-pip.sh`
+   - `sfw.sh` — installed by `setup-shim.sh`
+2. Adds a single one-line loader to your shell RC files:
+   ```bash
+   [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/scdp/init.sh" ] && . "${XDG_CONFIG_HOME:-$HOME/.config}/scdp/init.sh"  # scdp loader
+   ```
+   The trailing `# scdp loader` comment is the cleanup marker. The line is written once and never re-edited — subsequent setup runs only rewrite the files under `~/.config/scdp/`.
 
-If none exist, one is created for your login shell (`$SHELL`).
+### Which RC files get the loader
 
-Two sentinel-delimited blocks may be added:
+- `~/.zshrc` — always, if it exists
+- `~/.bashrc` and/or `~/.bash_profile` — handled smartly:
+  - Both exist, and `.bash_profile` sources `.bashrc` (the common pattern): **`.bashrc` only**. Login shells pick it up via the chain.
+  - Both exist independently (no chain): **both**, to keep login and non-login interactive shells covered.
+  - Only one exists: **that one**.
+- If no RC file exists, one is created for your login shell (`$SHELL`).
 
-- `# >>> sca-pip-age-gating >>>` — pip/pip3 age-gating wrapper
-- `# >>> sca-shim >>>` — sfw wrapper functions for npm, npx, yarn, pnpm, uv
+RC files are backed up to `<filename>.bak.<timestamp>` only when the loader is first added.
 
-All files are backed up to `<filename>.bak.<timestamp>` before modification.
+### Double-source safety
+
+`init.sh` is idempotent: it sets `_SCDP_LOADED=1` on first source and returns early on any subsequent source within the same shell. So even if both `.bashrc` and `.bash_profile` end up with the loader line (e.g. a non-standard setup), the wrappers are only loaded once.
+
+To force a re-source after editing a wrapper file:
+
+```bash
+unset _SCDP_LOADED && . ~/.config/scdp/init.sh
+```
+
+### Migrating from earlier versions
+
+Older or intermediate versions of this toolkit wrote multi-line blocks directly into your RC files:
+
+- `# >>> sca-pip-age-gating >>>` ... `# <<< sca-pip-age-gating <<<` (pre-relocation)
+- `# >>> sca-shim >>>` ... `# <<< sca-shim <<<` (pre-relocation)
+- `# >>> scdp >>>` ... `# <<< scdp <<<` (intermediate loop-style loader)
+
+The new setup detects these and prints a one-time warning per RC file, but does **not** modify them — it's policy to never touch user-authored RC content beyond the loader line we own. The new one-line loader is appended after any legacy block, so the new wrappers shadow the old definitions. To clean up:
+
+```bash
+sed -i '' '/# >>> sca-pip-age-gating >>>/,/# <<< sca-pip-age-gating <<</d' ~/.zshrc
+sed -i '' '/# >>> sca-shim >>>/,/# <<< sca-shim <<</d' ~/.zshrc
+sed -i '' '/# >>> scdp >>>/,/# <<< scdp <<</d' ~/.zshrc
+```
 
 ## Reverting
 
@@ -118,19 +152,18 @@ All files are backed up to `<filename>.bak.<timestamp>` before modification.
    cp ~/.npmrc.bak.20260401120000 ~/.npmrc
    ```
 
-2. Remove shell blocks from your RC files:
+2. Remove the wrapper files and loader line:
    ```bash
-   # Remove pip age-gating
-   sed -i '' '/# >>> sca-pip-age-gating >>>/,/# <<< sca-pip-age-gating <<</d' ~/.zshrc
-   # Remove sfw shims
-   sed -i '' '/# >>> sca-shim >>>/,/# <<< sca-shim <<</d' ~/.zshrc
+   rm -rf ~/.config/scdp/
+   sed -i '' '/# scdp loader$/d' ~/.zshrc
+   # repeat for ~/.bashrc, ~/.bash_profile as needed
    ```
 
 3. Uninstall sfw: `npm uninstall -g sfw`
 
 ## AI Coding Agents
 
-This toolkit is designed to protect your development machine during normal day-to-day work. The sfw shell wrappers and pip age-gating function are defined as aliases/functions in your shell RC files (`~/.zshrc`, `~/.bashrc`). Some AI coding agents (e.g. Claude Code in normal use) source your shell profile and will pick up the wrappers automatically; others may not.
+This toolkit is designed to protect your development machine during normal day-to-day work. The sfw shell wrappers and pip age-gating functions are defined in `~/.config/scdp/*.sh`, sourced by a small loader in your shell RC files (`~/.zshrc`, `~/.bashrc`). Some AI coding agents (e.g. Claude Code in normal use) source your shell profile and will pick up the wrappers automatically; others may not.
 
 If your agent doesn't load your shell profile, the wrappers are silently skipped and commands hit the package manager directly. To provide protection, add something like this to your system prompt or project instructions:
 

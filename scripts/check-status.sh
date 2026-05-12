@@ -69,12 +69,18 @@ resolve_system_bin() {
 # =============================================================================
 
 HAS_NVM=false
+HAS_FNM=false
 HAS_PYENV=false
 
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then
     source "$NVM_DIR/nvm.sh" 2>/dev/null
     HAS_NVM=true
+fi
+
+if command -v fnm &>/dev/null; then
+    eval "$(fnm env)" 2>/dev/null || true
+    HAS_FNM=true
 fi
 
 if [[ -d "$HOME/.pyenv" ]]; then
@@ -116,6 +122,19 @@ if [[ "$HAS_NVM" == "true" ]]; then
     fi
 fi
 
+if [[ "$HAS_FNM" == "true" ]]; then
+    fnm_npm_ver="$(npm --version 2>/dev/null)"
+    if [[ -n "$fnm_npm_ver" ]]; then
+        fnm_node="$(node --version 2>/dev/null || echo unknown)"
+        if version_gte "$fnm_npm_ver" "11.10.0"; then
+            ok "fnm (Node ${fnm_node}): npm v${fnm_npm_ver} — supports age gating"
+        else
+            warn "fnm (Node ${fnm_node}): npm v${fnm_npm_ver} — ${RED}needs >= 11.10.0${NC}"
+            upgrade "npm install -g npm@latest"
+        fi
+    fi
+fi
+
 sys_npm="$(resolve_system_bin npm)"
 if [[ -n "$sys_npm" ]]; then
     sys_npm_ver="$($sys_npm --version 2>/dev/null)"
@@ -127,7 +146,7 @@ if [[ -n "$sys_npm" ]]; then
         warn "system ($sys_npm): v${sys_npm_ver} — ${RED}needs >= 11.10.0${NC}"
         upgrade "brew upgrade node   # or: $sys_npm install -g npm@latest"
     fi
-elif [[ "$HAS_NVM" != "true" ]] || [[ "$(nvm current 2>/dev/null)" == "none" ]]; then
+elif ! command -v npm &>/dev/null; then
     dim "Not installed"
 fi
 
@@ -136,14 +155,14 @@ if [[ -n "$val" ]]; then
     ok "Config: min-release-age=${val}"
 else
     fail "Config: min-release-age not set"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 val="$(ini_value "$HOME/.npmrc" "ignore-scripts")"
 if [[ "$val" == "true" ]]; then
     ok "Config: ignore-scripts=${val}"
 else
     fail "Config: ignore-scripts not set to true"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 
 # --- pnpm ---
@@ -174,14 +193,14 @@ if [[ -n "$val" ]]; then
     ok "Config: minimum-release-age=${val}"
 else
     fail "Config: minimum-release-age not set"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 val="$(ini_value "$PNPM_RC" "ignore-scripts")"
 if [[ "$val" == "true" ]]; then
     ok "Config: ignore-scripts=${val}"
 else
     fail "Config: ignore-scripts not set to true"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 
 # --- yarn ---
@@ -204,14 +223,14 @@ if [[ -n "$val" ]]; then
     ok "Config: npmMinimalAgeGate: ${val}"
 else
     fail "Config: npmMinimalAgeGate not set"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 val="$(yaml_value "$HOME/.yarnrc.yml" "enableScripts")"
 if [[ "$val" == "false" ]]; then
     ok "Config: enableScripts: ${val}"
 else
     fail "Config: enableScripts not set to false"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 
 # --- bun ---
@@ -234,14 +253,14 @@ if [[ -n "$val" ]]; then
     ok "Config: minimumReleaseAge = ${val}"
 else
     fail "Config: minimumReleaseAge not set"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 val="$(toml_value "$HOME/bunfig.toml" "ignoreScripts")"
 if [[ "$val" == "true" ]]; then
     ok "Config: ignoreScripts = ${val}"
 else
     fail "Config: ignoreScripts not set to true"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 
 # --- uv ---
@@ -259,7 +278,7 @@ if [[ -n "$val" ]]; then
     ok "Config: exclude-newer = ${val}"
 else
     fail "Config: exclude-newer not set"
-    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+    upgrade "$SCRIPT_DIR/setup-age-gating.sh"
 fi
 
 # --- pip ---
@@ -303,19 +322,13 @@ elif [[ "$HAS_PYENV" != "true" ]]; then
     dim "Not installed"
 fi
 
-# Check if shell wrapper is handling pip age-gating
-pip_shim_found=false
-for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
-    if [[ -f "$rc" ]] && grep -q "uploaded-prior-to" "$rc"; then
-        pip_shim_found=true
-        break
-    fi
-done
-if [[ "$pip_shim_found" == "true" ]]; then
-    ok "Shell wrapper: pip age-gating active"
+# Check if shell wrapper file is installed (loader presence is checked
+# in the Malware Detection section below)
+if [[ -f "${XDG_CONFIG_HOME:-$HOME/.config}/scdp/pip.sh" ]]; then
+    ok "Shell wrapper: pip age-gating installed"
 else
-    warn "Shell wrapper: pip age-gating not active"
-    upgrade "bash $SCRIPT_DIR/setup-pip.sh"
+    warn "Shell wrapper: pip age-gating not installed"
+    upgrade "$SCRIPT_DIR/setup-pip.sh"
 fi
 
 # --- go ---
@@ -356,52 +369,86 @@ if command -v sfw &>/dev/null; then
     ok "Installed: $(command -v sfw)"
 else
     fail "Not installed"
-    upgrade "bash $SCRIPT_DIR/install-sfw.sh"
+    upgrade "$SCRIPT_DIR/install-sfw.sh"
 fi
 
-# --- Shell wrappers per tool ---
+# --- scdp wrapper files + loader ---
 echo ""
-echo -e "${BOLD}Shell wrapper status${NC} ${DIM}(intercepts commands with sfw proxy)${NC}"
+echo -e "${BOLD}scdp shell wrappers${NC} ${DIM}(files under ~/.config/scdp/, loaded on shell startup)${NC}"
 
-# Collect all wrapped functions across RC files
-check_wrapper() {
-    local tool="$1"
-    for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
-        if [[ -f "$rc" ]]; then
-            # Check for alias or function definition
-            if grep -q "alias ${tool}=" "$rc" || grep -q "^${tool}()" "$rc"; then
-                return 0
-            fi
-        fi
-    done
-    return 1
-}
+SCDP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/scdp"
+SCDP_INIT="$SCDP_DIR/init.sh"
+SCDP_PIP="$SCDP_DIR/pip.sh"
+SCDP_SFW="$SCDP_DIR/sfw.sh"
 
-# sfw shim tools (setup-shim.sh)
-for tool in npm npx yarn pnpm uv; do
-    if check_wrapper "$tool"; then
-        ok "${tool} — wrapped (sfw)"
-    else
-        if command -v "$tool" &>/dev/null; then
-            fail "${tool} — not wrapped"
-            upgrade "bash $SCRIPT_DIR/setup-shim.sh"
-        else
-            dim "${tool} — not installed"
-        fi
+# Loader presence — required for wrappers to actually be sourced
+loader_rcs=()
+for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
+    if [[ -f "$rc" ]] && grep -qF "# scdp loader" "$rc"; then
+        loader_rcs+=("${rc/#$HOME/~}")
     fi
 done
 
-# pip (setup-pip.sh — handles both age-gating and sfw)
-if check_wrapper "pip" || check_wrapper "pip3"; then
-    ok "pip — wrapped (age-gating + sfw if available)"
+if [[ ${#loader_rcs[@]} -gt 0 ]]; then
+    ok "Loader line present in: ${loader_rcs[*]}"
+else
+    fail "Loader not found in any shell RC — wrappers will not be sourced"
+    upgrade "$SCRIPT_DIR/setup-pip.sh  (or setup-shim.sh)"
+fi
+
+# init.sh — the entrypoint the loader line sources
+if [[ -f "$SCDP_INIT" ]]; then
+    ok "Init entrypoint: $SCDP_INIT"
+else
+    fail "Init entrypoint missing: $SCDP_INIT"
+    upgrade "$SCRIPT_DIR/setup-pip.sh  (or setup-shim.sh)"
+fi
+
+# pip wrapper
+if [[ -f "$SCDP_PIP" ]]; then
+    ok "pip wrapper: $SCDP_PIP"
+    if command -v pip &>/dev/null || command -v pip3 &>/dev/null; then
+        dim "pip / pip3 installed — wrapper will inject --uploaded-prior-to on install/download"
+    else
+        dim "pip / pip3 not installed — wrapper inactive until pip appears"
+    fi
 else
     if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
-        fail "pip — not wrapped"
-        upgrade "bash $SCRIPT_DIR/setup-pip.sh"
+        fail "pip wrapper missing: $SCDP_PIP"
+        upgrade "$SCRIPT_DIR/setup-pip.sh"
     else
-        dim "pip — not installed"
+        dim "pip / pip3 not installed; pip wrapper not installed either"
     fi
 fi
+
+# sfw wrapper + per-tool status (the wrapper conditionally aliases each tool at shell startup)
+if [[ -f "$SCDP_SFW" ]]; then
+    ok "sfw wrapper: $SCDP_SFW"
+    for tool in npm npx yarn pnpm uv; do
+        if command -v "$tool" &>/dev/null; then
+            dim "  ${tool} installed — aliased to 'sfw ${tool}' on shell startup"
+        else
+            dim "  ${tool} not installed — alias skipped"
+        fi
+    done
+else
+    fail "sfw wrapper missing: $SCDP_SFW"
+    upgrade "$SCRIPT_DIR/setup-shim.sh"
+fi
+
+# Warn about leftover blocks from previous toolkit versions
+for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
+    [[ -f "$rc" ]] || continue
+    if grep -qF "# >>> sca-pip-age-gating >>>" "$rc"; then
+        warn "${rc/#$HOME/~} has a legacy '# >>> sca-pip-age-gating >>>' block — safe to remove manually"
+    fi
+    if grep -qF "# >>> sca-shim >>>" "$rc"; then
+        warn "${rc/#$HOME/~} has a legacy '# >>> sca-shim >>>' block — safe to remove manually"
+    fi
+    if grep -qF "# >>> scdp >>>" "$rc"; then
+        warn "${rc/#$HOME/~} has an intermediate '# >>> scdp >>>' loop loader — safe to remove manually"
+    fi
+done
 
 # Not supported by sfw
 echo ""
@@ -422,7 +469,7 @@ fi
 # --- AI agent disclaimer ---
 echo ""
 echo -e "${BOLD}Note: AI coding agents${NC}"
-echo -e "  The shell wrappers above are aliases/functions in your RC files."
+echo -e "  The shell wrappers above live in ~/.config/scdp/*.sh, sourced by a one-line loader in your RC files."
 echo -e "  Some AI agents (e.g. Claude Code) source your shell profile and will"
 echo -e "  pick them up automatically; others may not."
 echo ""

@@ -10,6 +10,10 @@ set -euo pipefail
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh" 2>/dev/null
 
+if command -v fnm &>/dev/null; then
+    eval "$(fnm env)" 2>/dev/null || true
+fi
+
 if command -v pyenv &>/dev/null; then
     eval "$(pyenv init --path 2>/dev/null)" || true
     eval "$(pyenv init - 2>/dev/null)" || true
@@ -279,7 +283,7 @@ configure_sbt() {
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║  Supply Chain Protection — Package Manager Defaults     ║${NC}"
+echo -e "${BOLD}║  Supply Chain Protection - Package Manager Defaults      ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "Setting ${DELAY_DAYS}-day minimum release age and disabling lifecycle install scripts"

@@ -11,9 +11,13 @@ set -euo pipefail
 # After installing sfw, run setup-shim.sh to wrap your package managers.
 # =============================================================================
 
-# --- Load nvm so we can find npm ---
+# --- Load nvm / fnm so we can find npm ---
 export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh" 2>/dev/null
+
+if command -v fnm &>/dev/null; then
+    eval "$(fnm env)" 2>/dev/null || true
+fi
 
 # --- Colors & Logging ---
 RED='\033[0;31m'
@@ -103,7 +107,7 @@ install_via_binary() {
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║  Install sfw (Socket Firewall Free)                     ║${NC}"
+echo -e "${BOLD}║  Install sfw (Socket Firewall Free)                      ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -116,11 +120,11 @@ if command -v sfw &>/dev/null; then
 fi
 
 if install_via_npm || install_via_binary; then
-    log_done "sfw installed successfully: $(command -v sfw)"
-    echo ""
-    echo "Next steps:"
-    echo "  bash $SCRIPT_DIR/setup-shim.sh    # wrap npm, yarn, pnpm, uv with sfw"
-    echo "  bash $SCRIPT_DIR/setup-pip.sh     # wrap pip with age-gating + sfw"
+    log_done "sfw installed: $(command -v sfw)"
+    if [[ -z "${SCDP_IN_SETUP:-}" ]]; then
+        echo ""
+        echo "Next: ./scripts/setup-shim.sh to route npm / npx / yarn / pnpm / uv through sfw"
+    fi
     echo ""
 else
     log_error "Could not install sfw via npm or binary download."

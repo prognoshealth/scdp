@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKIP_SHIM=false
+export SCDP_IN_SETUP=1   # signals to sub-scripts that they're running as part of the chain
 
 for arg in "$@"; do
     case "$arg" in
@@ -37,14 +38,16 @@ echo ""
 echo -e "${BOLD}=== Supply Chain Attack Protection Toolkit ===${NC}"
 echo ""
 echo "This script will:"
-echo "  1. Configure release-age gating (7-day delay) on your package managers"
-echo "  2. Set up pip age-gating shell wrapper"
+echo "  1. Configure release-age gating (7-day delay) and disable lifecycle"
+echo "     install scripts in your Node package managers (npm, pnpm, yarn, bun)"
+echo "  2. Install the pip age-gating wrapper to ~/.config/scdp/pip.sh"
 if [[ "$SKIP_SHIM" == "false" ]]; then
     echo "  3. Install sfw (Socket Firewall) for malware scanning"
-    echo "  4. Add shell wrappers to route package managers through sfw"
+    echo "  4. Install the sfw shim wrapper to ~/.config/scdp/sfw.sh"
 fi
 echo ""
-echo "All config files are backed up before modification."
+echo "Existing package-manager config files are backed up before modification."
+echo "A one-line loader is added to your shell RC files (one-time)."
 echo ""
 
 # --- Step 1: Age gating configs ---
@@ -67,20 +70,33 @@ if [[ "$SKIP_SHIM" == "false" ]]; then
     bash "$SCRIPT_DIR/setup-shim.sh"
 else
     echo ""
-    echo -e "${BOLD}━━━ Step 3-4: sfw (skipped via --no-shim) ━━━${NC}"
+    echo -e "${BOLD}━━━ Steps 3 & 4 skipped (--no-shim) ━━━${NC}"
+    echo "Age gating is configured, but sfw malware scanning was not installed."
+    echo "To add sfw later: ./scripts/install-sfw.sh && ./scripts/setup-shim.sh"
 fi
 
 # --- Summary ---
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║                    Setup Complete                       ║${NC}"
+echo -e "${BOLD}║                     Setup Complete                       ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "Next steps:"
-echo "  1. Restart your terminal, or source your shell config:"
-[[ -f "$HOME/.zshrc" ]]        && echo "     source ~/.zshrc"
-[[ -f "$HOME/.bashrc" ]]       && echo "     source ~/.bashrc"
-[[ -f "$HOME/.bash_profile" ]] && echo "     source ~/.bash_profile"
+echo "  Restart your terminal, or source the RC file(s) that received the loader:"
+loader_in=()
+for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
+    [[ -f "$rc" ]] && grep -qF "# scdp loader" "$rc" && loader_in+=("$rc")
+done
+if [[ ${#loader_in[@]} -gt 0 ]]; then
+    for rc in "${loader_in[@]}"; do
+        echo "     source ${rc/#$HOME/~}"
+    done
+else
+    echo "     (none — open a new terminal)"
+fi
 echo ""
-echo "To revert: restore .bak files and remove sca-pip-age-gating/sca-shim blocks from shell RC files"
+echo "To revert:"
+echo "  - restore .bak files for any package-manager configs you want reverted"
+echo "  - rm -rf ~/.config/scdp/"
+echo "  - sed -i '' '/# scdp loader\$/d' ~/.zshrc   # repeat for ~/.bashrc, ~/.bash_profile as needed"
 echo ""
