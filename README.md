@@ -1,9 +1,10 @@
 # Supply Chain Dependency Protection
 
-Protect your development machine from supply chain attacks with two layers of defense:
+Protect your development machine from supply chain attacks with three layers of defense:
 
 1. **Release-age gating** — Package managers won't install packages published less than 7 days ago, blocking most attacks that rely on quick adoption of malicious packages.
-2. **Malware scanning** — Socket's `sfw` intercepts package manager commands and blocks known malware before it reaches your machine.
+2. **Install-script blocking** — Lifecycle scripts (`preinstall`, `install`, `postinstall`) are disabled by default in npm, pnpm, yarn, and bun, neutralizing the most common payload-delivery mechanism even if a malicious package slips through.
+3. **Malware scanning** — Socket's `sfw` intercepts package manager commands and blocks known malware before it reaches your machine.
 
 ## Quick Start
 
@@ -39,7 +40,7 @@ The frequency and sophistication of supply chain attacks is accelerating:
 - **Automation of attacks** — attackers use automation to publish thousands of malicious packages targeting popular names, known dependency confusion patterns, and trending libraries.
 - **Speed of adoption** — CI/CD pipelines and lockfile updates pull new versions automatically, often within hours of publication.
 
-The two defenses in this toolkit — **release-age gating** and **malware scanning** — directly counter the most common attack pattern: publish a malicious package and rely on fast, unreviewed adoption.
+The defenses in this toolkit — **release-age gating**, **install-script blocking**, and **malware scanning** — directly counter the most common attack pattern: publish a malicious package, exploit its lifecycle scripts to run code at install time, and rely on fast, unreviewed adoption.
 
 ## Scripts
 
@@ -51,15 +52,18 @@ Shows the current state of your protections: which package managers have age gat
 
 ### `scripts/setup-age-gating.sh`
 
-Configures release-age gating in package manager config files. Sets a 7-day minimum release age so newly published packages are delayed before they can be installed.
+Configures two protective defaults in package manager config files:
 
-| File | Setting | Tool |
-|------|---------|------|
-| `~/.npmrc` | `min-release-age=7` | npm (>=11.10) |
-| `~/Library/Preferences/pnpm/rc` (macOS) | `minimum-release-age=10080` | pnpm (>=10.16) |
-| `~/.yarnrc.yml` | `npmMinimalAgeGate: "7d"` | yarn (>=4.10) |
-| `~/bunfig.toml` | `minimumReleaseAge = 604800` | bun (>=1.3) |
-| `~/.config/uv/uv.toml` | `exclude-newer = "7 days"` | uv |
+- **Release-age gating** — a 7-day minimum, so newly published packages are delayed before they can be installed.
+- **Install-script blocking** — lifecycle scripts (`preinstall`, `install`, `postinstall`) are disabled for third-party dependencies in the Node ecosystem. Trade-off and recovery covered in [Install-script blocking](#install-script-blocking) below.
+
+| File | Age-gating setting | Script-blocking setting | Tool |
+|------|---------------------|--------------------------|------|
+| `~/.npmrc` | `min-release-age=7` | `ignore-scripts=true` | npm (>=11.10) |
+| `~/Library/Preferences/pnpm/rc` (macOS) | `minimum-release-age=10080` | `ignore-scripts=true` | pnpm (>=10.16) |
+| `~/.yarnrc.yml` | `npmMinimalAgeGate: "7d"` | `enableScripts: false` | yarn (>=4.10) |
+| `~/bunfig.toml` | `minimumReleaseAge = 604800` | `ignoreScripts = true` | bun (>=1.3) |
+| `~/.config/uv/uv.toml` | `exclude-newer = "7 days"` | — | uv |
 
 Configs are written proactively even if the tool isn't installed yet — they'll take effect when it is. If an outdated version is detected, the script warns loudly with the upgrade command.
 
@@ -132,6 +136,29 @@ If your agent doesn't load your shell profile, the wrappers are silently skipped
 
 > When running package install commands, always prefix them with `sfw` to route through the Socket Firewall for malware scanning. For example, use `sfw npm install <pkg>` instead of `npm install <pkg>`. This applies to npm, npx, yarn, pnpm, uv, and pip.
 
+## Install-script blocking
+
+Most malicious npm packages don't wait to be `require()`d — they execute via a `postinstall` (or `preinstall`/`install`) script the moment `npm install` runs. That's how the Axios compromise dropped its RAT: a trojanized transitive dependency's postinstall ran before anyone could review a single line. Setting `ignore-scripts` globally neutralizes this class of attack — the script is on disk but never invoked.
+
+The trade-off: some packages legitimately need their install script to compile native code or download platform-specific binaries. Common examples include `esbuild`, `sharp`, `better-sqlite3`, `node-sass`, and `node-gyp`-based modules. When these are installed under a blocked-scripts default, the install completes but the package won't actually work until you rebuild it.
+
+### Rebuilding a package you trust
+
+Once you've vetted the package, run the rebuild command for your package manager:
+
+| Manager | Command |
+|---------|---------|
+| npm | `npm rebuild <pkg>` |
+| pnpm | `pnpm rebuild <pkg>` (or `pnpm approve-builds` to allowlist interactively) |
+| yarn | `yarn rebuild [<pkg>]` |
+| bun | `bun pm trust <pkg>` (adds to `trustedDependencies` and rebuilds) |
+
+For projects you control, you can also list known-good packages in `package.json` so they always build:
+
+- **pnpm**: `pnpm.allowedDeps` (newer) / `pnpm.onlyBuiltDependencies` (older) in `package.json`.
+- **bun**: `trustedDependencies` array in `package.json`.
+- **yarn** / **npm**: no per-package allowlist — rebuild explicitly after install.
+
 ## Known Limitations
 
 - **pip**: Age-gating only works in interactive shell sessions (shell function wrapper). CI/scripts need the `--uploaded-prior-to` flag explicitly.
@@ -142,14 +169,14 @@ If your agent doesn't load your shell profile, the wrappers are silently skipped
 
 ## Supported Ecosystems
 
-| Ecosystem | Age Gating | sfw Scanning |
-|-----------|-----------|-------------|
-| npm/Node.js | config file | sfw shim |
-| pnpm | config file | sfw shim |
-| yarn (v4+) | config file | sfw shim |
-| bun | config file | — |
-| pip/Python | shell wrapper | via setup-pip.sh |
-| uv | config file (rolling 7-day window) | sfw shim |
-| Go | not available | not covered (free tier) |
-| sbt/Scala | not available | not covered (free tier) |
-| Rust/Cargo | — | supported by sfw |
+| Ecosystem | Age Gating | Script Blocking | sfw Scanning |
+|-----------|-----------|------------------|-------------|
+| npm/Node.js | config file | config file (`ignore-scripts`) | sfw shim |
+| pnpm | config file | config file (`ignore-scripts`) | sfw shim |
+| yarn (v4+) | config file | config file (`enableScripts: false`) | sfw shim |
+| bun | config file | config file (`ignoreScripts`) | — |
+| pip/Python | shell wrapper | n/a (`setup.py` runs inherently) | via setup-pip.sh |
+| uv | config file (rolling 7-day window) | n/a | sfw shim |
+| Go | not available | n/a | not covered (free tier) |
+| sbt/Scala | not available | n/a | not covered (free tier) |
+| Rust/Cargo | — | n/a | supported by sfw |

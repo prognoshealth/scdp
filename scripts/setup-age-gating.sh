@@ -138,6 +138,7 @@ configure_npm() {
     backup_file "$config"
     # npm uses days (not minutes like pnpm)
     set_ini_value "$config" "min-release-age" "$DELAY_DAYS"
+    set_ini_value "$config" "ignore-scripts" "true"
 }
 
 configure_pnpm() {
@@ -167,6 +168,7 @@ configure_pnpm() {
     fi
     backup_file "$config"
     set_ini_value "$config" "minimum-release-age" "10080"
+    set_ini_value "$config" "ignore-scripts" "true"
 }
 
 configure_yarn() {
@@ -187,6 +189,7 @@ configure_yarn() {
     local config="$HOME/.yarnrc.yml"
     backup_file "$config"
     set_yaml_value "$config" "npmMinimalAgeGate" '"7d"'
+    set_yaml_value "$config" "enableScripts" "false"
 }
 
 configure_bun() {
@@ -207,6 +210,7 @@ configure_bun() {
     local config="$HOME/bunfig.toml"
     backup_file "$config"
     set_toml_value "$config" "[install]" "minimumReleaseAge" "604800"
+    set_toml_value "$config" "[install]" "ignoreScripts" "true"
 }
 
 configure_uv() {
@@ -278,8 +282,8 @@ echo -e "${BOLD}╔════════════════════�
 echo -e "${BOLD}║  Supply Chain Protection — Package Manager Defaults     ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "Setting ${DELAY_DAYS}-day minimum release age for all supported package managers."
-echo "Existing config files will be backed up before modification."
+echo "Setting ${DELAY_DAYS}-day minimum release age and disabling lifecycle install scripts"
+echo "for all supported package managers. Existing config files are backed up first."
 
 configure_npm
 configure_pnpm

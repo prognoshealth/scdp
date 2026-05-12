@@ -94,13 +94,14 @@ echo -e "${BOLD}Supply Chain Protection — Status${NC}"
 
 echo ""
 echo -e "${BOLD}══════════════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}  RELEASE AGE GATING${NC}"
-echo -e "${BOLD}  Delays installation of newly published packages${NC}"
+echo -e "${BOLD}  PACKAGE MANAGER DEFAULTS${NC}"
+echo -e "${BOLD}  Age gating delays newly published packages; ignore-scripts blocks${NC}"
+echo -e "${BOLD}  postinstall / preinstall / install lifecycle scripts${NC}"
 echo -e "${BOLD}══════════════════════════════════════════════════════════${NC}"
 
 # --- npm ---
 echo ""
-echo -e "${BOLD}npm${NC} ${DIM}(config: ~/.npmrc → min-release-age)${NC}"
+echo -e "${BOLD}npm${NC} ${DIM}(config: ~/.npmrc → min-release-age, ignore-scripts)${NC}"
 
 if [[ "$HAS_NVM" == "true" ]]; then
     nvm_node="$(nvm current 2>/dev/null || echo "none")"
@@ -137,6 +138,13 @@ else
     fail "Config: min-release-age not set"
     upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
 fi
+val="$(ini_value "$HOME/.npmrc" "ignore-scripts")"
+if [[ "$val" == "true" ]]; then
+    ok "Config: ignore-scripts=${val}"
+else
+    fail "Config: ignore-scripts not set to true"
+    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+fi
 
 # --- pnpm ---
 echo ""
@@ -148,7 +156,7 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
 else
     PNPM_RC="$HOME/.config/pnpm/rc"
 fi
-echo -e "${BOLD}pnpm${NC} ${DIM}(config: $PNPM_RC → minimum-release-age)${NC}"
+echo -e "${BOLD}pnpm${NC} ${DIM}(config: $PNPM_RC → minimum-release-age, ignore-scripts)${NC}"
 if command -v pnpm &>/dev/null; then
     version="$(pnpm --version 2>/dev/null)"
     where="$(command -v pnpm)"
@@ -168,10 +176,17 @@ else
     fail "Config: minimum-release-age not set"
     upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
 fi
+val="$(ini_value "$PNPM_RC" "ignore-scripts")"
+if [[ "$val" == "true" ]]; then
+    ok "Config: ignore-scripts=${val}"
+else
+    fail "Config: ignore-scripts not set to true"
+    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+fi
 
 # --- yarn ---
 echo ""
-echo -e "${BOLD}yarn${NC} ${DIM}(config: ~/.yarnrc.yml → npmMinimalAgeGate)${NC}"
+echo -e "${BOLD}yarn${NC} ${DIM}(config: ~/.yarnrc.yml → npmMinimalAgeGate, enableScripts)${NC}"
 if command -v yarn &>/dev/null; then
     version="$(yarn --version 2>/dev/null)"
     where="$(command -v yarn)"
@@ -191,10 +206,17 @@ else
     fail "Config: npmMinimalAgeGate not set"
     upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
 fi
+val="$(yaml_value "$HOME/.yarnrc.yml" "enableScripts")"
+if [[ "$val" == "false" ]]; then
+    ok "Config: enableScripts: ${val}"
+else
+    fail "Config: enableScripts not set to false"
+    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+fi
 
 # --- bun ---
 echo ""
-echo -e "${BOLD}bun${NC} ${DIM}(config: ~/bunfig.toml → minimumReleaseAge)${NC}"
+echo -e "${BOLD}bun${NC} ${DIM}(config: ~/bunfig.toml → minimumReleaseAge, ignoreScripts)${NC}"
 if command -v bun &>/dev/null; then
     version="$(bun --version 2>/dev/null)"
     where="$(command -v bun)"
@@ -212,6 +234,13 @@ if [[ -n "$val" ]]; then
     ok "Config: minimumReleaseAge = ${val}"
 else
     fail "Config: minimumReleaseAge not set"
+    upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
+fi
+val="$(toml_value "$HOME/bunfig.toml" "ignoreScripts")"
+if [[ "$val" == "true" ]]; then
+    ok "Config: ignoreScripts = ${val}"
+else
+    fail "Config: ignoreScripts not set to true"
     upgrade "bash $SCRIPT_DIR/setup-age-gating.sh"
 fi
 
