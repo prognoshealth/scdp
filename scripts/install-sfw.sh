@@ -33,6 +33,29 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# --- Flags ---
+USE_BINARY_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --binary) USE_BINARY_ONLY=1 ;;
+        -h|--help)
+            cat <<EOF
+Usage: $(basename "$0") [--binary]
+
+  --binary   Skip the npm install path and download the standalone binary
+             to /usr/local/bin/sfw. Use this if you switch Node versions
+             often (fnm/nvm) — npm-installed sfw lives under a specific
+             Node version and disappears when you switch.
+EOF
+            exit 0
+            ;;
+        *)
+            log_error "Unknown argument: $arg"
+            exit 1
+            ;;
+    esac
+done
+
 # =============================================================================
 # Install methods
 # =============================================================================
@@ -64,10 +87,22 @@ install_via_binary() {
 
     local binary_name=""
     case "${os}-${arch}" in
-        darwin-arm64)  binary_name="sfw-darwin-arm64" ;;
-        darwin-x86_64) binary_name="sfw-darwin-x86_64" ;;
-        linux-x86_64)  binary_name="sfw-linux-x86_64" ;;
-        linux-aarch64) binary_name="sfw-linux-arm64" ;;
+        darwin-arm64)  binary_name="sfw-free-macos-arm64" ;;
+        darwin-x86_64) binary_name="sfw-free-macos-x86_64" ;;
+        linux-x86_64)
+            if [[ -f /lib/ld-musl-x86_64.so.1 ]]; then
+                binary_name="sfw-free-musl-linux-x86_64"
+            else
+                binary_name="sfw-free-linux-x86_64"
+            fi
+            ;;
+        linux-aarch64)
+            if [[ -f /lib/ld-musl-aarch64.so.1 ]]; then
+                binary_name="sfw-free-musl-linux-arm64"
+            else
+                binary_name="sfw-free-linux-arm64"
+            fi
+            ;;
         *)
             log_error "Unsupported platform: ${os}-${arch}"
             return 1
@@ -119,7 +154,15 @@ if command -v sfw &>/dev/null; then
     exit 0
 fi
 
-if install_via_npm || install_via_binary; then
+if [[ "$USE_BINARY_ONLY" == "1" ]]; then
+    install_ok=0
+    install_via_binary && install_ok=1
+else
+    install_ok=0
+    (install_via_npm || install_via_binary) && install_ok=1
+fi
+
+if [[ "$install_ok" == "1" ]]; then
     log_done "sfw installed: $(command -v sfw)"
     if [[ -z "${SCDP_IN_SETUP:-}" ]]; then
         echo ""
@@ -127,7 +170,11 @@ if install_via_npm || install_via_binary; then
     fi
     echo ""
 else
-    log_error "Could not install sfw via npm or binary download."
+    if [[ "$USE_BINARY_ONLY" == "1" ]]; then
+        log_error "Could not install sfw via binary download."
+    else
+        log_error "Could not install sfw via npm or binary download."
+    fi
     log_error "Install manually from: https://github.com/SocketDev/sfw-free/releases"
     exit 1
 fi
