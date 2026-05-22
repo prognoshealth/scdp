@@ -75,7 +75,9 @@ pip is handled separately because it has no config file support for age gating �
 
 ### `scripts/install-sfw.sh`
 
-Installs Socket Firewall Free (`sfw`) globally via npm. sfw is a proxy that scans packages against Socket.dev's malware database before allowing installation. Requires npm.
+Installs Socket Firewall Free (`sfw`) — a proxy that scans packages against Socket.dev's malware database. Tries npm first, falls back to a standalone binary.
+
+If you switch Node versions often (`fnm`/`nvm`): npm-installed sfw lives under one specific Node version's `node_modules` and disappears from `PATH` when you switch. Pass `--binary` to install the standalone binary to `/usr/local/bin/sfw` instead — it's Node-independent.
 
 ### `scripts/setup-shim.sh`
 
